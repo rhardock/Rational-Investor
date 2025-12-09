@@ -10,10 +10,12 @@ import {
   AlertTriangle,
   CheckCircle,
   Minus,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
@@ -36,7 +38,7 @@ export default function Analysis() {
   const [symbol, setSymbol] = useState(initialSymbol);
   const [searchSymbol, setSearchSymbol] = useState(initialSymbol);
 
-  const { data: analysis, isLoading, error } = useQuery<AnalysisData>({
+  const { data: analysis, isLoading, error, refetch, isFetching } = useQuery<AnalysisData>({
     queryKey: ["/api/analysis", searchSymbol],
     enabled: !!searchSymbol,
   });
@@ -103,10 +105,27 @@ export default function Analysis() {
                   </CardDescription>
                 </div>
                 <div className="text-right">
-                  <p className="text-3xl font-bold font-mono">
-                    ${(analysis.stock.currentPrice || 0).toFixed(2)}
-                  </p>
-                  <div className="flex items-center justify-end gap-1">
+                  <div className="flex items-center justify-end gap-3">
+                    <p className="text-3xl font-bold font-mono">
+                      ${(analysis.stock.currentPrice || 0).toFixed(2)}
+                    </p>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          onClick={() => refetch?.()}
+                          aria-label="Refresh price"
+                          disabled={!!isFetching}
+                          data-testid="button-refresh-price"
+                        >
+                          <RefreshCw className={isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">Refresh price</TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <div className="flex items-center justify-end gap-1 mt-1">
                     {(analysis.stock.priceChangePercent || 0) >= 0 ? (
                       <TrendingUp className="h-4 w-4 text-chart-2" />
                     ) : (
