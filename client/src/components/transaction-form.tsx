@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -93,32 +93,65 @@ export function TransactionForm({
   const watchedDate = form.watch("date");
   const dateKey = watchedDate ? format(watchedDate, "yyyy-MM-dd") : undefined;
 
-  useQuery<{ date: string; close: number } | null, Error>({
-    queryKey: ["/api/stock-price", watchedStockId, dateKey],
-    enabled: !!watchedStockId && !!dateKey,
-    queryFn: async () => {
-      const res = await apiRequest("GET", `/api/stocks/${watchedStockId}/price?date=${dateKey}`);
-      return (await res.json()) as { date: string; close: number } | null;
-    },
-    onSuccess: (data) => {
-      // Only set the price if the user hasn't entered one yet
-      const currentPrice = form.getValues().price;
-      if (data && data.close !== undefined && (!currentPrice || String(currentPrice).trim() === "")) {
-        // fill with two decimal places
-        form.setValue("price", String(Number(data.close).toFixed(2)));
-        setPriceAutoFilled(true);
+  useEffect(() => {
+    if (!watchedStockId || !dateKey) return;
+
+    const fetchPrice = async () => {
+      try {
+        const res = await apiRequest(
+          "GET",
+          `/api/stocks/${watchedStockId}/price?date=${dateKey}`
+        );
+        const data = (await res.json()) as {
+          date: string;
+          close: number;
+        } | null;
+        console.debug("price fetch success", { watchedStockId, dateKey, data });
+
+        const currentPrice = form.getValues().price;
+        if (
+          data &&
+          data.close !== undefined &&
+          (!currentPrice || String(currentPrice).trim() === "")
+        ) {
+          form.setValue("price", String(Number(data.close).toFixed(2)), {
+            shouldDirty: true,
+            shouldValidate: true,
+          });
+          setPriceAutoFilled(true);
+        }
+      } catch (err) {
+        console.warn("price fetch error", {
+          stockId: watchedStockId,
+          dateKey,
+          err,
+        });
       }
-    },
-    retry: false,
-  });
+    };
 
-  // Clear auto-fill indicator when stock or date changes
-  // (user likely wants a new auto-fill attempt)
-  React.useEffect(() => {
-    setPriceAutoFilled(false);
-  }, [watchedStockId, dateKey]);
+    fetchPrice();
+  }, [watchedStockId, dateKey, form]);
 
-  
+  const lastPriceKeysRef = useRef<{ stockId?: string; dateKey?: string }>({});
+
+  useEffect(() => {
+    const last = lastPriceKeysRef.current;
+    const changed = last.stockId !== watchedStockId || last.dateKey !== dateKey;
+
+    if (changed && priceAutoFilled) {
+      form.setValue("price", "", { shouldDirty: true, shouldValidate: true });
+      setPriceAutoFilled(false);
+    }
+
+    if (changed) {
+      lastPriceKeysRef.current = { stockId: watchedStockId, dateKey };
+    }
+  }, [watchedStockId, dateKey, form, priceAutoFilled]);
+
+  // Simple debug: log "Hello" whenever the selected date changes
+  // useEffect(() => {
+  //   if (dateKey) console.log("Hello 3");
+  // }, [dateKey]);
 
   const createTransactionMutation = useMutation({
     mutationFn: async (data: TransactionFormValues) => {
@@ -185,10 +218,7 @@ export function TransactionForm({
                     </FormControl>
                     <SelectContent>
                       {stocks.map((stock) => (
-                        <SelectItem
-                          key={stock.id}
-                          value={stock.id.toString()}
-                        >
+                        <SelectItem key={stock.id} value={stock.id.toString()}>
                           {stock.symbol} - {stock.name}
                         </SelectItem>
                       ))}
@@ -264,7 +294,9 @@ export function TransactionForm({
                     </FormControl>
                     <FormMessage />
                     {priceAutoFilled && (
-                      <p className="text-xs text-muted-foreground mt-1">Auto-filled from price history</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Auto-filled from price history
+                      </p>
                     )}
                   </FormItem>
                 )}
@@ -314,7 +346,6 @@ export function TransactionForm({
                             ) : (
                               <span>Pick a date</span>
                             )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                           </Button>
                         </FormControl>
                       </PopoverTrigger>
