@@ -69,11 +69,14 @@ export function TransactionForm({
   const [open, setOpen] = useState(false);
   const { toast } = useToast();
 
+  const [priceFillState, setPriceFillState] = useState<PriceFillState>("none");
+
   const { data: stocks = [] } = useQuery<Stock[]>({
     queryKey: ["/api/stocks"],
   });
 
-  const [priceAutoFilled, setPriceAutoFilled] = useState(false);
+  type PriceFillState = "none"| "auto" | "user" | "no-data";
+  // const [priceAutoFilled, setPriceAutoFilled] = useState(false);
 
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionSchema),
@@ -94,7 +97,10 @@ export function TransactionForm({
   const dateKey = watchedDate ? format(watchedDate, "yyyy-MM-dd") : undefined;
 
   useEffect(() => {
-    if (!watchedStockId || !dateKey) return;
+    if (!watchedStockId || !dateKey) {
+      setPriceFillState("none");
+      return;
+    }
 
     const fetchPrice = async () => {
       try {
@@ -106,7 +112,7 @@ export function TransactionForm({
           date: string;
           close: number;
         } | null;
-        console.debug("price fetch success", { watchedStockId, dateKey, data });
+        console.log("price fetch success", { watchedStockId, dateKey, data });
 
         const currentPrice = form.getValues().price;
         if (
@@ -118,9 +124,11 @@ export function TransactionForm({
             shouldDirty: true,
             shouldValidate: true,
           });
-          setPriceAutoFilled(true);
+          // setPriceAutoFilled(true);
+          setPriceFillState("auto");
         }
       } catch (err) {
+        setPriceFillState("no-data");
         console.warn("price fetch error", {
           stockId: watchedStockId,
           dateKey,
@@ -138,15 +146,16 @@ export function TransactionForm({
     const last = lastPriceKeysRef.current;
     const changed = last.stockId !== watchedStockId || last.dateKey !== dateKey;
 
-    if (changed && priceAutoFilled) {
+    if (changed) {
       form.setValue("price", "", { shouldDirty: true, shouldValidate: true });
-      setPriceAutoFilled(false);
+      setPriceFillState("user");
+      // setPriceAutoFilled(false);
     }
 
     if (changed) {
       lastPriceKeysRef.current = { stockId: watchedStockId, dateKey };
     }
-  }, [watchedStockId, dateKey, form, priceAutoFilled]);
+  }, [watchedStockId, dateKey, form]);
 
   // Simple debug: log "Hello" whenever the selected date changes
   // useEffect(() => {
@@ -224,7 +233,7 @@ export function TransactionForm({
                       ))}
                     </SelectContent>
                   </Select>
-                  <FormMessage />
+                  {/* <FormMessage /> */}
                 </FormItem>
               )}
             />
@@ -246,7 +255,7 @@ export function TransactionForm({
                       <SelectItem value="sell">Sell</SelectItem>
                     </SelectContent>
                   </Select>
-                  <FormMessage />
+                  {/* <FormMessage /> */}
                 </FormItem>
               )}
             />
@@ -267,7 +276,7 @@ export function TransactionForm({
                         data-testid="input-shares"
                       />
                     </FormControl>
-                    <FormMessage />
+                    {/* <FormMessage /> */}
                   </FormItem>
                 )}
               />
@@ -287,15 +296,20 @@ export function TransactionForm({
                         onChange={(e) => {
                           field.onChange(e);
                           // User edited price manually -> clear auto-filled indicator
-                          setPriceAutoFilled(false);
+                          setPriceFillState("user");
                         }}
                         data-testid="input-price"
                       />
                     </FormControl>
-                    <FormMessage />
-                    {priceAutoFilled && (
+                    {/* <FormMessage /> */}
+                    {priceFillState === "auto" && (
                       <p className="text-xs text-muted-foreground mt-1">
                         Auto-filled from price history
+                      </p>
+                    )}
+                    {priceFillState === "no-data" && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        No price data available for selected date
                       </p>
                     )}
                   </FormItem>
@@ -324,45 +338,81 @@ export function TransactionForm({
                 )}
               />
 
+              {/*
+                  <FormField
+                  control={form.control}
+                  name="date"
+                  render={({ field }) => (
+                  <FormItem>
+                  <FormLabel>Date</FormLabel>
+                  <Popover>
+                  <PopoverTrigger asChild>
+                  <FormControl>
+                  <Button
+                  variant="outline"
+                  className={cn(
+                  "w-full pl-3 text-left font-normal",
+                  !field.value && "text-muted-foreground"
+                  )}
+                  data-testid="button-date"
+                  >
+                  {field.value ? (
+                  format(field.value, "MMM d, yyyy")
+                  ) : (
+                  <span>Pick a date</span>
+                  )}
+                  </Button>
+                  </FormControl>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                  mode="single"
+                  selected={field.value}
+                  onSelect={field.onChange}
+                  disabled={(date) => date > new Date()}
+                  initialFocus
+                  />
+                  </PopoverContent>
+                  </Popover>
+                  <FormMessage />
+                  </FormItem>
+                  )}
+                  />
+                */}
+
+              {/* 6. DATE (NATIVE HTML INPUT) - FIXED */}
               <FormField
                 control={form.control}
                 name="date"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Date</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant="outline"
-                            className={cn(
-                              "w-full pl-3 text-left font-normal",
-                              !field.value && "text-muted-foreground"
-                            )}
-                            data-testid="button-date"
-                          >
-                            {field.value ? (
-                              format(field.value, "MMM d, yyyy")
-                            ) : (
-                              <span>Pick a date</span>
-                            )}
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          disabled={(date) => date > new Date()}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
+                    <FormControl>
+                      <Input
+                        // Using the Shadcn/ui Input component for consistent styling
+                        type="date"
+                        data-testid="input-date"
+                        // Convert the Date object (field.value) to a YYYY-MM-DD string
+                        // This uses a check to ensure field.value is a Date object before converting
+                        value={field.value instanceof Date ? field.value.toISOString().substring(0, 10) : ''}
+                        onChange={(e) => {
+                          const dateString = e.target.value;
+                          if (dateString) {
+                            // Convert the YYYY-MM-DD string back into a Date object
+                            // Appending 'T00:00:00' helps prevent timezone offset issues.
+                            const date = new Date(dateString + 'T00:00:00');
+                            field.onChange(date);
+                          } else {
+                            field.onChange(null);
+                          }
+                        }}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
-              />
+              />              
+              
             </div>
 
             <FormField

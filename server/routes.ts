@@ -196,9 +196,9 @@ export async function registerRoutes(
 
       if (prior) return res.json({ date: prior.date.toISOString(), close: prior.close });
 
-      // Fallback: try live quote
-      const quote = await fetchStockQuote(stock.symbol).catch(() => null);
-      if (quote) return res.json({ date: new Date().toISOString(), close: quote.currentPrice });
+      // Fallback: try live quote -- do not fall back... error on no data for older dates
+      // const quote = await fetchStockQuote(stock.symbol).catch(() => null);
+      // if (quote) return res.json({ date: new Date().toISOString(), close: quote.currentPrice });
 
       return res.status(404).json({ error: "No price available for the requested date" });
     } catch (error) {
