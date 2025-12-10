@@ -366,7 +366,7 @@ export default function Analysis() {
                   <span className="text-sm text-muted-foreground">Dividend Yield</span>
                   <span className="text-sm font-medium font-mono">
                     {analysis.stock.dividendYield
-                      ? `${(analysis.stock.dividendYield * 100).toFixed(2)}%`
+                      ? `${(analysis.stock.dividendYield).toFixed(2)}%`
                       : "N/A"}
                   </span>
                 </div>
