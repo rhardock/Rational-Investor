@@ -159,6 +159,54 @@ export async function registerRoutes(
     }
   });
 
+  // Get stock price for a specific date (or latest if no date)
+  app.get("/api/stocks/:id/price", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const dateStr = req.query.date as string | undefined; // expected YYYY-MM-DD
+
+      // Validate stock
+      const stock = await storage.getStock(id);
+      if (!stock) return res.status(404).json({ error: "Stock not found" });
+
+      // If no date provided, return latest stored price or live quote
+      if (!dateStr) {
+        const latest = await storage.getLatestPrice(id);
+        if (latest) return res.json({ date: latest.date.toISOString(), close: latest.close });
+
+        const quote = await fetchStockQuote(stock.symbol).catch(() => null);
+        if (quote) return res.json({ date: new Date().toISOString(), close: quote.currentPrice });
+
+        return res.status(404).json({ error: "No price available" });
+      }
+
+      // Find stored price for given date (or the most recent prior)
+      const targetDate = new Date(dateStr);
+      const prices = await storage.getStockPrices(id, 1000);
+
+      // Normalize dates to YYYY-MM-DD for comparison
+      const targetKey = dateStr;
+      let exact = prices.find((p) => p.date.toISOString().slice(0, 10) === targetKey);
+      if (exact) return res.json({ date: exact.date.toISOString(), close: exact.close });
+
+      // If not exact, find the closest prior date (max date <= target)
+      let prior = prices
+        .filter((p) => new Date(p.date) <= targetDate)
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+
+      if (prior) return res.json({ date: prior.date.toISOString(), close: prior.close });
+
+      // Fallback: try live quote
+      const quote = await fetchStockQuote(stock.symbol).catch(() => null);
+      if (quote) return res.json({ date: new Date().toISOString(), close: quote.currentPrice });
+
+      return res.status(404).json({ error: "No price available for the requested date" });
+    } catch (error) {
+      console.error("Error fetching price by date:", error);
+      res.status(500).json({ error: "Failed to fetch price" });
+    }
+  });
+
   // Portfolio
   app.get("/api/portfolio", async (req, res) => {
     try {
