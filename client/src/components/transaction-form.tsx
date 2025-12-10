@@ -73,6 +73,8 @@ export function TransactionForm({
     queryKey: ["/api/stocks"],
   });
 
+  const [priceAutoFilled, setPriceAutoFilled] = useState(false);
+
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionSchema),
     defaultValues: {
@@ -85,6 +87,38 @@ export function TransactionForm({
       notes: "",
     },
   });
+
+  // Watch stock and date to suggest a default price for the selected transaction date
+  const watchedStockId = form.watch("stockId");
+  const watchedDate = form.watch("date");
+  const dateKey = watchedDate ? format(watchedDate, "yyyy-MM-dd") : undefined;
+
+  useQuery<{ date: string; close: number } | null, Error>({
+    queryKey: ["/api/stock-price", watchedStockId, dateKey],
+    enabled: !!watchedStockId && !!dateKey,
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/stocks/${watchedStockId}/price?date=${dateKey}`);
+      return (await res.json()) as { date: string; close: number } | null;
+    },
+    onSuccess: (data) => {
+      // Only set the price if the user hasn't entered one yet
+      const currentPrice = form.getValues().price;
+      if (data && data.close !== undefined && (!currentPrice || String(currentPrice).trim() === "")) {
+        // fill with two decimal places
+        form.setValue("price", String(Number(data.close).toFixed(2)));
+        setPriceAutoFilled(true);
+      }
+    },
+    retry: false,
+  });
+
+  // Clear auto-fill indicator when stock or date changes
+  // (user likely wants a new auto-fill attempt)
+  React.useEffect(() => {
+    setPriceAutoFilled(false);
+  }, [watchedStockId, dateKey]);
+
+  
 
   const createTransactionMutation = useMutation({
     mutationFn: async (data: TransactionFormValues) => {
@@ -220,10 +254,18 @@ export function TransactionForm({
                         step="0.01"
                         placeholder="150.00"
                         {...field}
+                        onChange={(e) => {
+                          field.onChange(e);
+                          // User edited price manually -> clear auto-filled indicator
+                          setPriceAutoFilled(false);
+                        }}
                         data-testid="input-price"
                       />
                     </FormControl>
                     <FormMessage />
+                    {priceAutoFilled && (
+                      <p className="text-xs text-muted-foreground mt-1">Auto-filled from price history</p>
+                    )}
                   </FormItem>
                 )}
               />
